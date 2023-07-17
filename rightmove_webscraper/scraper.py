@@ -1,4 +1,3 @@
-
 import datetime
 from lxml import html
 import numpy as np
@@ -16,6 +15,7 @@ class RightmoveData:
 
     The query to rightmove can be renewed by calling the `refresh_data` method.
     """
+
     def __init__(self, url: str, get_floorplans: bool = False):
         """Initialize the scraper with a URL from the results of a property
         search performed on www.rightmove.co.uk.
@@ -98,7 +98,9 @@ class RightmoveData:
         """
         if not by:
             by = "type" if "commercial" in self.rent_or_sale else "number_bedrooms"
-        assert by in self.get_results.columns, f"Column not found in `get_results`: {by}"
+        assert (
+            by in self.get_results.columns
+        ), f"Column not found in `get_results`: {by}"
         df = self.get_results.dropna(axis=0, subset=["price"])
         groupers = {"price": ["count", "mean"]}
         df = df.groupby(df[by]).agg(groupers)
@@ -168,6 +170,7 @@ class RightmoveData:
         //a[@class="propertyCard-link"]\
         //h2[@class="propertyCard-title"]/text()"""
         xp_addresses = """//address[@class="propertyCard-address"]//span/text()"""
+        xp_descriptions = """//div[@class="propertyCard-description"]//span/text()"""
         xp_weblinks = """//div[@class="propertyCard-details"]//a[@class="propertyCard-link"]/@href"""
         xp_agent_urls = """//div[@class="propertyCard-contactsItem"]\
         //div[@class="propertyCard-branchLogo"]\
@@ -177,9 +180,16 @@ class RightmoveData:
         price_pcm = tree.xpath(xp_prices)
         titles = tree.xpath(xp_titles)
         addresses = tree.xpath(xp_addresses)
+        descriptions = tree.xpath(xp_descriptions)
         base = "http://www.rightmove.co.uk"
-        weblinks = [f"{base}{tree.xpath(xp_weblinks)[w]}" for w in range(len(tree.xpath(xp_weblinks)))]
-        agent_urls = [f"{base}{tree.xpath(xp_agent_urls)[a]}" for a in range(len(tree.xpath(xp_agent_urls)))]
+        weblinks = [
+            f"{base}{tree.xpath(xp_weblinks)[w]}"
+            for w in range(len(tree.xpath(xp_weblinks)))
+        ]
+        agent_urls = [
+            f"{base}{tree.xpath(xp_agent_urls)[a]}"
+            for a in range(len(tree.xpath(xp_agent_urls)))
+        ]
 
         # Optionally get floorplan links from property urls (longer runtime):
         floorplan_urls = list() if get_floorplans else np.nan
@@ -197,11 +207,11 @@ class RightmoveData:
                     floorplan_urls.append(np.nan)
 
         # Store the data in a Pandas DataFrame:
-        data = [price_pcm, titles, addresses, weblinks, agent_urls]
+        data = [price_pcm, titles, addresses, weblinks, agent_urls, descriptions]
         data = data + [floorplan_urls] if get_floorplans else data
         temp_df = pd.DataFrame(data)
         temp_df = temp_df.transpose()
-        columns = ["price", "type", "address", "url", "agent_url"]
+        columns = ["price", "type", "address", "url", "agent_url", "description"]
         columns = columns + ["floorplan_url"] if get_floorplans else columns
         temp_df.columns = columns
 
@@ -216,7 +226,6 @@ class RightmoveData:
 
         # Iterate through all pages scraping results:
         for p in range(1, self.page_count + 1, 1):
-
             # Create the URL of the specific results page:
             p_url = f"{str(self.url)}&index={p * 24}"
 
@@ -247,16 +256,24 @@ class RightmoveData:
 
         # Extract short postcode area to a separate column:
         pat = r"\b([A-Za-z][A-Za-z]?[0-9][0-9]?[A-Za-z]?)\b"
-        results["postcode"] = results["address"].astype(str).str.extract(pat, expand=True)[0]
+        results["postcode"] = (
+            results["address"].astype(str).str.extract(pat, expand=True)[0]
+        )
 
         # Extract full postcode to a separate column:
         pat = r"([A-Za-z][A-Za-z]?[0-9][0-9]?[A-Za-z]?[0-9]?\s[0-9]?[A-Za-z][A-Za-z])"
-        results["full_postcode"] = results["address"].astype(str).str.extract(pat, expand=True)[0]
+        results["full_postcode"] = (
+            results["address"].astype(str).str.extract(pat, expand=True)[0]
+        )
 
         # Extract number of bedrooms from `type` to a separate column:
         pat = r"\b([\d][\d]?)\b"
-        results["number_bedrooms"] = results["type"].astype(str).str.extract(pat, expand=True)[0]
-        results.loc[results["type"].str.contains("studio", case=False), "number_bedrooms"] = 0
+        results["number_bedrooms"] = (
+            results["type"].astype(str).str.extract(pat, expand=True)[0]
+        )
+        results.loc[
+            results["type"].str.contains("studio", case=False), "number_bedrooms"
+        ] = 0
         results["number_bedrooms"] = pd.to_numeric(results["number_bedrooms"])
 
         # Clean up annoying white spaces and newlines in `type` column:
